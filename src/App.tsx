@@ -5,7 +5,15 @@ import debounce from 'lodash.debounce';
 import { Person } from './types/Person';
 import cn from 'classnames';
 
-export const App: React.FC = () => {
+type AppProps = {
+  debounceDelay?: number;
+  onSelected?: (person: Person | null) => void;
+};
+
+export const App: React.FC<AppProps> = ({
+  debounceDelay = 300,
+  onSelected,
+}) => {
   const [query, setQuery] = useState('');
   const [onFocus, setOnFocus] = useState(false);
   const [currentPerson, setCurrentPerson] = useState<Person | null>(null);
@@ -16,13 +24,18 @@ export const App: React.FC = () => {
     : 'No selected person';
 
   const applyQuery = useMemo(
-    () => debounce(setAppliedQuery, 300),
-    [setAppliedQuery],
+    () => debounce(setAppliedQuery, debounceDelay),
+    [setAppliedQuery, debounceDelay],
   );
 
   const filteredPeople = useMemo(() => {
+    const caseQuery = appliedQuery.toLocaleLowerCase().trim();
+
+    if (!caseQuery) {
+      return peopleFromServer;
+    }
+
     return peopleFromServer.filter(person => {
-      const caseQuery = appliedQuery.toLocaleLowerCase().trim();
       const caseName = person.name.toLocaleLowerCase().trim();
 
       return caseName.includes(caseQuery);
@@ -32,16 +45,27 @@ export const App: React.FC = () => {
   const handleQueryChange = (
     event: React.ChangeEvent<HTMLInputElement>,
   ): void => {
-    setQuery(event.target.value.trim());
-    applyQuery(event.target.value.trim());
+    const newValue = event.target.value.trim();
+
+    if (newValue === query) {
+      return;
+    }
+
+    setQuery(newValue);
+    applyQuery(newValue);
     setCurrentPerson(null);
   };
 
   const handleSelectedChange = (person: Person) => {
     setQuery(person.name);
-    applyQuery(person.name);
+    applyQuery.cancel();
+    setTimeout(() => applyQuery(person.name), 0);
     setCurrentPerson(person);
     setOnFocus(false);
+
+    if (onSelected) {
+      onSelected(person);
+    }
   };
 
   enum Sex {
@@ -76,13 +100,13 @@ export const App: React.FC = () => {
             >
               <div className="dropdown-content">
                 {filteredPeople.map(person => {
-                  const { sex } = person;
+                  const { sex, slug } = person;
 
                   return (
                     <div
                       className="dropdown-item"
                       data-cy="suggestion-item"
-                      key={person.name}
+                      key={slug}
                       onClick={() => handleSelectedChange(person)}
                     >
                       <p
